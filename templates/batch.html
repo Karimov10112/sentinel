@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_macros.html" import lv, cat, bar with context %}
+{% block title %}Tahlil #{{ b.id }}{% endblock %}
+{% block content %}
+{% set s = b.summary %}
+<div class="page-head"><div><h1>Tahlil #{{ b.id }}</h1><p>{{ b.name }} · {{ b.created|t }} · θ = {{ s.thr|dec }} ({{ THR_UZ.get(s.thr_mode, s.thr_mode) }}) · {{ 'TTL belgilarisiz model' if s.variant == 'nottl' else 'barcha belgilar' }}</p></div>
+  <div class="row"><a class="btn secondary" href="{{ url_for('stream') }}">← Oqimlar tahlili</a><a class="btn" href="{{ url_for('incidents') }}">Insidentlar →</a></div></div>
+<div class="grid grid-6">
+  <div class="card stat"><div class="l">Oqimlar</div><div class="v blue">{{ s.flows|num }}</div>{% if s.truth %}<div class="sub">ulardan hujum: {{ s.truth.attacks|num }}</div>{% endif %}</div>
+  <div class="card stat"><div class="l">Ogohlantirishlar</div><div class="v">{{ s.alerts|num }}</div><div class="sub">{% for k in ['P1','P2','P3','P4'] %}{{ k }} {{ s.levels.get(k, 0) }}{{ ' · ' if not loop.last }}{% endfor %}</div></div>
+  <div class="card stat"><div class="l">Yangi insidentlar ({{ s.window|int }} s)</div><div class="v red">{{ s.incidents_new }}</div><div class="sub">{{ ((s.alerts / s.incidents_new)|round(0)|int) if s.incidents_new else 0 }} baravar kam · P1 {{ s.incidents_levels.get('P1', 0) }} / P2 {{ s.incidents_levels.get('P2', 0) }}</div></div>
+  {% if s.truth %}
+  <div class="card stat"><div class="l">Precision</div><div class="v green">{{ s.truth.precision|pct }}</div><div class="sub">{{ s.truth.true_alerts|num }} to‘g‘ri ogohlantirish</div></div>
+  <div class="card stat"><div class="l">Recall</div><div class="v green">{{ s.truth.recall|pct }}</div><div class="sub">FPR {{ s.truth.fpr|pct }}</div></div>
+  {% else %}<div class="card stat"><div class="l">Yorliqlar</div><div class="v" style="font-size:1.1rem">yo‘q</div><div class="sub">aniqlikni tahlilchi baholari bo‘yicha kuzating</div></div><div class="card stat"><div class="l">Taqsimot siljishi</div><div class="v">{{ s.drift.get('psi_max', 0)|dec }}</div><div class="sub">PSI (maks.)</div></div>{% endif %}
+  <div class="card stat"><div class="l">O‘tkazish qobiliyati</div><div class="v blue">{{ s.throughput|num }}</div><div class="sub">oqim/s · jami {{ s.seconds }} s</div></div>
+</div>
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>Prototip ko‘rsatkichlari (3.8-jadval shaklida)</h2>
+    <table><tbody>
+      <tr><td>Qayta ishlangan oqimlar{% if s.truth %} / ulardan hujumlar{% endif %}</td><td class="num">{{ s.flows|num }}{% if s.truth %} / {{ s.truth.attacks|num }}{% endif %}</td></tr>
+      <tr><td>Ogohlantirishlar (θ = {{ s.thr|dec }})</td><td class="num">{{ s.alerts_model|num }}</td></tr>
+      <tr><td>+ faqat autoenkoder anomaliyalari (P4){% if s.truth %}, ulardan hujum{% endif %}</td><td class="num">{{ s.alerts_ae_only|num }}{% if s.truth %} / {{ s.truth.ae_only_true|num }}{% endif %}</td></tr>
+      {% if s.truth %}<tr><td>Haqiqiy hujumga to‘g‘ri kelgan ogohlantirishlar</td><td class="num">{{ s.truth.true_alerts|num }} (Precision {{ s.truth.precision|pct }})</td></tr>
+      <tr><td>Aniqlangan hujumlar ulushi (Recall)</td><td class="num">{{ s.truth.recall|pct }}</td></tr>{% endif %}
+      <tr><td>Yangi insidentlar ({{ s.window|int }} s oyna)</td><td class="num">{{ s.incidents_new }}</td></tr>
+      <tr><td>Ulardan P1 / P2</td><td class="num">{{ s.incidents_levels.get('P1', 0) }} / {{ s.incidents_levels.get('P2', 0) }}</td></tr>
+      {% if s.truth %}<tr><td>P1 / P2 ogohlantirishlarining aniqligi</td><td class="num">{{ s.truth.by_level.get('P1')|pct }} / {{ s.truth.by_level.get('P2')|pct }}</td></tr>{% endif %}
+      <tr><td>Belgilar + modellar, 1 000 oqim uchun</td><td class="num">{{ s.ms_model_1000 }} ms</td></tr>
+      <tr><td>Ogohlantirish (prioritet, guruhlash), 1 000 oqim uchun</td><td class="num">{{ s.ms_alert_1000 }} ms</td></tr>
+      <tr><td>Bitta insident: SHAP + xabar + yetkazish</td><td class="num">{{ s.ms_incident }} ms</td></tr>
+      <tr><td>O‘tkazish qobiliyati</td><td class="num">≈ {{ s.throughput|num }} oqim/s</td></tr>
+    </tbody></table>
+    {% if not s.telegram %}<p class="small muted mt">Ommaviy tahlilda Telegram o‘chirilgan — xabarlar «ko‘rib chiqish» holatida saqlandi.</p>{% endif %}
+  </div>
+  <div class="card">
+    {% if s.truth %}
+    <h2>Hujum turlari bo‘yicha aniqlash</h2>
+    {% for c, r in s.truth.by_category.items() %}<div class="hbar" style="grid-template-columns: 130px 1fr 60px"><span class="small">{{ c }}</span><div class="track"><div class="fill" style="width: {{ (r * 100)|round(1) }}%"></div></div><span class="num small">{{ r|pct }}</span></div>{% endfor %}
+    <h3 class="mt">Prioritet darajalari aniqligi</h3>
+    <table><tbody>{% for k in ['P1','P2','P3','P4'] %}<tr><td>{{ lv(k) }}</td><td class="num">{{ s.levels.get(k, 0)|num }} ogohl.</td><td class="num">{{ s.truth.by_level.get(k)|pct }}</td><td class="small">{{ CHANNEL[k] }}</td></tr>{% endfor %}</tbody></table>
+    {% endif %}
+    <h3 class="mt">Taqsimot siljishi</h3>
+    <div class="kv small"><div>sttl = 254 ulushi</div><div>{{ s.drift.sttl254|pct }}</div><div>10 000 oqimga ogohlantirish</div><div>{{ s.drift.alert_rate_10k|num }}</div>
+    {% if s.drift.psi %}<div>PSI (maks.)</div><div>{{ s.drift.psi_max|dec }} {% if s.drift.psi_max > 0.25 %}<span class="pill P2">jiddiy siljish — kalibrlash tavsiya etiladi</span>{% endif %}</div>{% endif %}</div>
+  </div>
+</div>
+<div class="card mt">
+  <h2>Yangi insidentlar (birinchi 30 tasi)</h2>
+  {% if incs %}<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Prioritet</th><th>Hujum turi</th><th>Xizmat / protokol</th><th class="num">Oqimlar</th><th>Ehtimollik</th><th>Asosiy sabab</th><th>Yorliq</th></tr></thead>
+    <tbody>{% for i in incs %}<tr><td><a href="{{ url_for('incident', iid=i.id) }}">#{{ i.id }}</a></td><td>{{ lv(i.level) }}</td><td>{{ cat(i.category) }}</td><td class="small">{{ i.service }} / {{ i.proto }}</td><td class="num">{{ i.count|num }}</td><td>{{ bar(i.max_p, '#cf3b3b') }}</td>
+      <td class="small">{% if i.reasons %}{{ i.reasons[0].name }} = <b>{{ i.reasons[0].value }}</b>{% endif %}</td><td class="small">{{ i.truth_true }} / {{ i.truth_false }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">Yangi insident yo‘q</div>{% endif %}
+</div>
+{% endblock %}

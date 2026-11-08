@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_macros.html" import lv, cat, bar, tg with context %}
+{% block title %}Oqimni tekshirish{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Bitta oqimni tekshirish</h1><p>SI dvigateli qarorini batafsil ko‘rish: XGBoost ehtimolligi, hujum turi, autoenkoder xatosi, DNN (zaxira model) bilan solishtirish, prioritet va SHAP tushuntirishi.</p></div></div>
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Namuna tanlash</h2>
+    <form method="post" class="row"><input type="hidden" name="csrf" value="{{ csrf_token }}">
+      {% for c in cats %}<button class="btn secondary small" name="sample" value="{{ c }}">{{ c }}</button>{% endfor %}
+    </form>
+    <p class="small muted mt">UNSW-NB15 sinov oqimidan tasodifiy oqim olinadi (kalibrlash namunasiga kirmagan).</p>
+  </div>
+  <div class="card">
+    <h2>O‘z oqimingiz</h2>
+    <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <textarea name="flow" placeholder='{"dur": 0.000009, "proto": "udp", "service": "dns", "state": "INT", "spkts": 2, "dpkts": 0, "sbytes": 114, "dbytes": 0, "rate": 111111.1, "sttl": 254, ...}  yoki sarlavhali CSV (2 qator)' style="min-height:110px"></textarea>
+      <button class="btn mt">Tahlil qilish</button>
+    </form>
+  </div>
+</div>
+{% if err %}<div class="flash error mt">{{ err }}</div>{% endif %}
+{% if res %}
+<div class="grid grid-main mt">
+  <div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2 class="mb0">Natija</h2><div class="row">{% if res.level %}{{ lv(res.level) }}{% else %}<span class="pill clean">Ogohlantirish yo‘q</span>{% endif %}{% if res.truth %}<span class="chip">Haqiqiy yorliq: <b>{{ res.truth }}</b></span>{% endif %}</div></div>
+      <div class="grid grid-3 mt">
+        <div><div class="small muted">XGBoost ehtimolligi p</div><div class="gauge"><b style="width: {{ (res.p * 100)|round(1) }}%; background:#cf3b3b"></b><i style="left: {{ (res.thr * 100)|round(1) }}%"><span>θ = {{ res.thr|dec }}</span></i></div><b>{{ res.p|pct(2) }}</b></div>
+        <div><div class="small muted">DNN (zaxira model)</div><div class="gauge"><b style="width: {{ (res.p_dnn * 100)|round(1) }}%; background:#6f4fd6"></b></div><b>{{ res.p_dnn|pct(2) }}</b></div>
+        <div><div class="small muted">Autoenkoder xatosi e(x)</div><div class="gauge"><b style="width: {{ [res.ae / (res.ae_thr * 4) * 100, 100]|min|round(1) }}%; background:#0e8a7d"></b><i style="left:25%"><span>θ_AE</span></i></div><b>{{ res.ae|dec(4) }}</b> {{ '— anomal' if res.ae_flag else '— normal' }}</div>
+      </div>
+      <div class="kv mt">
+        <div>Taxminiy hujum turi</div><div>{{ cat(res.cat) }} <span class="small muted">({{ CLASS_UZ.get(res.cat) }})</span></div>
+        <div>Qaror</div><div>{% if res.category == 'Normal' %}Normal oqim (p &lt; θ, autoenkoder anomaliya topmadi){% elif res.category == 'Anomaliya' %}XGBoost o‘tkazib yubordi, autoenkoder anomal deb topdi → P4{% else %}Hujum: {{ res.category }}{% endif %}</div>
+        <div>Prioritet bali</div><div><code>S = p·(0,5 + 0,5·w_tur) + 0,25·[e(x) &gt; θ_AE]·[p &lt; θ]</code> = <b>{{ res.score|dec }}</b>{% if res.category not in ('Normal', 'Anomaliya') %} (w_tur = {{ SEV.get(res.category) }}){% endif %}</div>
+        <div>Chegara</div><div>{{ THR_UZ[res.mode] }}; model: {{ 'TTL belgilarisiz' if res.variant == 'nottl' else 'barcha belgilar' }}</div>
+      </div>
+    </div>
+    <div class="card mt">
+      <h2>SHAP: 12 ta eng ta’sirli belgi</h2>
+      {% set mx = (res.shap|map(attribute='v')|map('abs')|max) or 1 %}
+      {% for s in res.shap %}<div class="shapbar"><span title="{{ s.f }}">{{ UZ.get(s.f, s.f) }} = <b>{{ s.x }}</b></span><div class="axis">
+        {% if s.v >= 0 %}<b style="left:50%; width: {{ (s.v / mx * 50)|round(1) }}%; background:#cf3b3b"></b>{% else %}<b style="right:50%; width: {{ (-s.v / mx * 50)|round(1) }}%; background:#1769d1"></b>{% endif %}</div><span class="num">{{ '%+.2f'|format(s.v) }}</span></div>{% endfor %}
+      <p class="small muted">Bazaviy qiymat {{ res.base|round(3) }} + SHAP hissalari yig‘indisi = modelning log-odds natijasi.</p>
+    </div>
+  </div>
+  <div>
+    <div class="card"><h2>Hujum turi ehtimolliklari</h2>
+      {% for c, x in res.pm %}<div class="hbar" style="grid-template-columns: 130px 1fr 60px"><span class="small">{{ c }}</span><div class="track"><div class="fill" style="width: {{ (x * 100)|round(1) }}%"></div></div><span class="num small">{{ x|pct }}</span></div>{% endfor %}</div>
+    {% if res.telegram %}<div class="card mt"><h2>Telegram xabari (namuna)</h2>{{ tg(res.telegram) }}</div>{% endif %}
+    <div class="card mt"><h2>Oqim belgilari</h2><pre style="max-height:300px">{{ row|pjson }}</pre></div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

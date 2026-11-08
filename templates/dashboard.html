@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_macros.html" import lv, cat, bar with context %}
+{% block title %}Boshqaruv paneli{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>SI ogohlantirish markazi</h1><p>Oqimlar SI dvigatelida tahlil qilinadi, ogohlantirishlar prioritetlanadi, insidentlarga birlashtiriladi va kanallar orqali yetkaziladi.</p></div>
+  <form method="post" action="{{ url_for('stream_run') }}" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="n" value="5000"><input type="hidden" name="seed" value="{{ range(1, 999)|random }}">
+    <button class="btn">▶ 5 000 ta oqimni tahlil qilish</button>
+  </form>
+</div>
+{% if not s.flows %}
+<div class="card note mb">Hozircha ma’lumot yo‘q. Yuqoridagi tugma UNSW-NB15 sinov to‘plamidan kalibrlashga kirmagan 5 000 ta oqimni (normal trafik va 9 turdagi hujum) prototip quvuridan o‘tkazadi. O‘z oqimlaringizni <a href="{{ url_for('stream') }}">Oqimlar tahlili</a> sahifasidan yoki <a href="{{ url_for('api_docs') }}">REST API</a> orqali yuborish mumkin.</div>
+{% endif %}
+<div class="grid grid-6 mt">
+  <div class="card stat"><div class="l">Tahlil qilingan oqimlar</div><div class="v blue">{{ s.flows|num }}</div><div class="sub">{{ batches|length and batches[0].summary.get('throughput', 0)|num }} oqim/s (oxirgi)</div></div>
+  <div class="card stat"><div class="l">Ogohlantirishlar</div><div class="v">{{ s.alerts|num }}</div><div class="sub">P1 {{ s.alert_levels.get('P1', 0)|num }} · P2 {{ s.alert_levels.get('P2', 0)|num }} · P3 {{ s.alert_levels.get('P3', 0)|num }} · P4 {{ s.alert_levels.get('P4', 0)|num }}</div></div>
+  <div class="card stat"><div class="l">Insidentlar</div><div class="v red">{{ s.incidents|num }}</div><div class="sub">{{ ((s.alerts / s.incidents) if s.incidents else 0)|round(0)|int }} baravar kam (guruhlash)</div></div>
+  <div class="card stat"><div class="l">Ochiq P1 / P2</div><div class="v amber">{{ s.open.get('P1', 0) }} / {{ s.open.get('P2', 0) }}</div><div class="sub">darhol ko‘rib chiqiladi</div></div>
+  <div class="card stat"><div class="l">Aniqlik (yorliqlar bo‘yicha)</div><div class="v green">{% set t = s.truth %}{{ (t.t / (t.t + t.f)) |pct if (t.t + t.f) else '—' }}</div><div class="sub">haqiqiy hujumga to‘g‘ri kelgan ogohlantirishlar</div></div>
+  <div class="card stat"><div class="l">Yuborilgan xabarlar</div><div class="v" style="font-size:1.4rem">{{ s.outbox.get('telegram:sent', 0) }} / {{ s.outbox.get('siem:sent', 0) }}</div><div class="sub">Telegram / SIEM {% if not ch.telegram_token %}· <a href="{{ url_for('channels') }}">Telegram sozlanmagan</a>{% endif %}</div></div>
+</div>
+
+<div class="grid grid-main mt">
+  <div>
+    <div class="card">
+      <h2>Ogohlantirishlar prioritet bo‘yicha (daqiqalar)</h2>
+      {% if timeline %}
+      {% set tot = [] %}{% for b, d in timeline %}{% set _ = tot.append(d.P1 + d.P2 + d.P3 + d.P4) %}{% endfor %}
+      {% set m = (tot|max) or 1 %}{% set w = 760 / (timeline|length) %}
+      <svg viewBox="0 0 800 200" width="100%" role="img" aria-label="Ogohlantirishlar grafigi">
+        <line x1="34" y1="165" x2="796" y2="165" stroke="#cfd7e3"/><text x="30" y="24" font-size="9" text-anchor="end" fill="#5d6b7e">{{ m }}</text>
+        {% for b, d in timeline %}{% set x = 36 + loop.index0 * w %}{% set y = namespace(v=165) %}
+          {% for k, c in [('P4', '#b8c2d0'), ('P3', '#e8c84a'), ('P2', '#ec8a2e'), ('P1', '#cf3b3b')] %}{% set h = d[k] / m * 140 %}
+            {% if d[k] %}<rect x="{{ x|round(1) }}" y="{{ (y.v - h)|round(1) }}" width="{{ (w * 0.8)|round(1) }}" height="{{ h|round(1) }}" fill="{{ c }}"><title>{{ b|t }} — {{ k }}: {{ d[k] }}</title></rect>{% endif %}{% set y.v = y.v - h %}
+          {% endfor %}
+          {% if loop.index0 % ((timeline|length // 6) or 1) == 0 %}<text x="{{ (x + w * 0.4)|round(1) }}" y="180" font-size="9" text-anchor="middle" fill="#5d6b7e">{{ b|hm }}</text>{% endif %}
+        {% endfor %}
+      </svg>
+      <div class="legend"><span style="--c:#cf3b3b">P1 kritik</span><span style="--c:#ec8a2e">P2 yuqori</span><span style="--c:#e8c84a">P3 o‘rta</span><span style="--c:#b8c2d0">P4 past</span></div>
+      {% else %}<div class="empty">Ma’lumot yo‘q</div>{% endif %}
+    </div>
+    <div class="card mt">
+      <div class="row" style="justify-content:space-between"><h2 class="mb0">Ochiq insidentlar</h2><a class="small" href="{{ url_for('incidents') }}">Barchasi →</a></div>
+      {% if incs %}
+      <div class="tbl-wrap"><table class="mt"><thead><tr><th>#</th><th>Prioritet</th><th>Hujum turi</th><th>Xizmat / protokol</th><th class="num">Oqimlar</th><th>Ehtimollik</th><th>Asosiy sabab (SHAP)</th><th>Vaqt</th></tr></thead>
+        <tbody>{% for i in incs %}<tr>
+          <td><a href="{{ url_for('incident', iid=i.id) }}">#{{ i.id }}</a></td><td>{{ lv(i.level) }}</td><td>{{ cat(i.category) }}</td>
+          <td class="small">{{ i.service }} / {{ i.proto }}</td><td class="num">{{ i.count|num }}</td><td>{{ bar(i.max_p, '#cf3b3b') }}</td>
+          <td class="small">{% if i.reasons %}{{ i.reasons[0].name }} = <b>{{ i.reasons[0].value }}</b>{% endif %}</td><td class="when">{{ i.first_ts|ts }}</td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<div class="empty">Ochiq insidentlar yo‘q</div>{% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Hujum turlari (insidentlar)</h2>
+      {% set tot = (s.categories|sum(attribute='flows')) or 1 %}
+      {% for c in s.categories %}<div class="hbar" style="grid-template-columns: 130px 1fr 70px"><span class="small">{{ c.category if c.category != 'Anomaliya' else 'Anomaliya (AE)' }}</span><div class="track"><div class="fill" style="width: {{ (c.flows / tot * 100)|round(1) }}%"></div></div><span class="num small">{{ c.n }} / {{ c.flows|num }}</span></div>{% else %}<div class="empty">—</div>{% endfor %}
+      <p class="small muted">insidentlar / ogohlantirilgan oqimlar</p>
+    </div>
+    <div class="card mt">
+      <h2>Yetkazish kanallari</h2>
+      <table><tbody>
+        <tr><td>{{ lv('P1') }}</td><td class="small">Telegram darhol + SOAR</td></tr><tr><td>{{ lv('P2') }}</td><td class="small">Telegram darhol</td></tr>
+        <tr><td>{{ lv('P3') }}</td><td class="small">e-pochta dayjesti (soatlik)</td></tr><tr><td>{{ lv('P4') }}</td><td class="small">faqat SIEM (Wazuh)</td></tr></tbody></table>
+      <div class="kv mt small"><div>Telegram</div><div>{{ 'sozlangan' if ch.telegram_token and ch.telegram_chat else 'sozlanmagan — xabarlar konsolda ko‘rsatiladi' }}</div>
+        <div>SIEM jurnali</div><div><code>{{ ch.siem_path }}</code></div><div>Dayjest navbati</div><div>{{ s.outbox.get('digest:queued', 0) }} ta</div></div>
+    </div>
+    <div class="card mt small">
+      <h3>SI dvigateli</h3>
+      <div class="kv"><div>Asosiy model</div><div>XGBoost{{ ' (TTL belgilarisiz)' if VARIANT == 'nottl' else ' (194 belgi)' }}</div>
+        <div>Chegara</div><div>θ = {{ THR|dec }} — {{ THR_UZ[THR_MODE] }}</div><div>Anomaliya</div><div>Autoenkoder, θ_AE = {{ M.config.ae_thr|dec(4) }}</div>
+        <div>Sinovdagi F1</div><div>{{ M.binary['XGBoost'].f1|dec }} (ROC-AUC {{ M.binary['XGBoost'].roc_auc|dec }})</div>
+        <div>Oxirgi tahlil</div><div>{% if batches %}<a href="{{ url_for('batch', bid=batches[0].id) }}">#{{ batches[0].id }} {{ batches[0].name[:48] }}</a>{% else %}—{% endif %}</div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

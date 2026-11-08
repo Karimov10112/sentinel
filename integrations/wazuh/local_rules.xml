@@ -1,0 +1,26 @@
+<!-- SentinelAI ogohlantirishlari uchun Wazuh qoidalari (diplom, D-ilova).
+     /var/ossec/etc/rules/local_rules.xml ga qo‘shing va ossec.conf ga quyidagini kiriting:
+     <localfile><log_format>json</log_format><location>/var/ossec/logs/ai-alerts.json</location></localfile> -->
+<group name="sentinel_ai,">
+  <rule id="100500" level="12">
+    <decoded_as>json</decoded_as>
+    <field name="ai_alert.priority">P1</field>
+    <description>SI: kritik hujum $(ai_alert.category) ($(ai_alert.service)/$(ai_alert.proto))</description>
+    <group>sentinel_ai_p1,</group>
+  </rule>
+  <rule id="100501" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="ai_alert.priority">P2</field>
+    <description>SI: yuqori prioritetli hujum $(ai_alert.category)</description>
+  </rule>
+  <rule id="100502" level="6">
+    <decoded_as>json</decoded_as>
+    <field name="ai_alert.priority">P3</field>
+    <description>SI: o‘rta prioritetli ogohlantirish $(ai_alert.category)</description>
+  </rule>
+  <rule id="100503" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="ai_alert.priority">P4</field>
+    <description>SI: past prioritetli anomaliya $(ai_alert.category)</description>
+  </rule>
+</group>

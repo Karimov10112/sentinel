@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Model monitoringi{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Model sifati va taqsimot siljishi monitoringi</h1><p>NIST AI RMF «Measure» va «Manage» funksiyalari: model har oyda tahlilchilar yorliqlari va yangi trafik asosida qayta o‘qitiladi, sifati (Precision, FPR, soxta ogohlantirishlar soni) doimiy kuzatiladi.</p></div>
+  <a class="btn secondary" href="{{ url_for('labels_csv') }}">Yorliqlarni eksport (qayta o‘qitish uchun)</a></div>
+<div class="grid grid-4">
+  <div class="card stat"><div class="l">Tahlilchi baholari</div><div class="v">{{ (s.verdicts.get('tp', 0) + s.verdicts.get('fp', 0)) }}</div><div class="sub">{{ s.verdicts.get('tp', 0) }} haqiqiy · {{ s.verdicts.get('fp', 0) }} soxta</div></div>
+  <div class="card stat"><div class="l">Precision (baholar bo‘yicha)</div><div class="v green">{{ fb_prec|pct if fb_prec is not none else '—' }}</div><div class="sub">insidentlar kesimida</div></div>
+  <div class="card stat"><div class="l">O‘quv to‘plamida sttl = 254</div><div class="v">{{ ref.get('sttl254', 0)|pct }}</div><div class="sub">etalon (barcha oqimlar)</div></div>
+  <div class="card stat"><div class="l">Tahlillar</div><div class="v blue">{{ bs|length }}</div><div class="sub">siljish har tahlilda hisoblanadi</div></div>
+</div>
+<div class="card mt">
+  <h2>Tahlillar bo‘yicha ko‘rsatkichlar</h2>
+  {% if bs %}
+  <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Vaqt</th><th>Manba</th><th class="num">Oqimlar</th><th class="num">θ</th><th class="num">Ogohl. / 10 000</th><th class="num">sttl=254</th><th class="num">PSI maks.</th><th>Eng katta siljish</th><th class="num">Precision</th><th class="num">FPR</th></tr></thead>
+    <tbody>{% for b in bs|reverse %}{% set s_ = b.summary %}{% set dr = s_.drift %}<tr>
+      <td><a href="{{ url_for('batch', bid=b.id) }}">#{{ b.id }}</a></td><td class="when">{{ b.created|ts }}</td><td class="small">{{ b.source }}</td><td class="num">{{ s_.flows|num }}</td><td class="num">{{ s_.thr|dec }}</td>
+      <td class="num">{{ dr.alert_rate_10k|num }}</td><td class="num">{{ dr.sttl254|pct }}</td>
+      <td class="num">{% if dr.psi %}<span class="{{ 'pill P2' if dr.psi_max > 0.25 else ('pill P3' if dr.psi_max > 0.1 else '') }}">{{ dr.psi_max|dec }}</span>{% else %}—{% endif %}</td>
+      <td class="small">{% if dr.psi %}{% set top = dr.psi|dictsort(by='value', reverse=true) %}{{ top[0][0] }} ({{ top[0][1]|dec }}){% endif %}</td>
+      <td class="num">{{ s_.truth.precision|pct if s_.truth else '—' }}</td><td class="num">{{ s_.truth.fpr|pct if s_.truth else '—' }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">Tahlillar yo‘q</div>{% endif %}
+  <p class="small muted mt">PSI (Population Stability Index) — kiruvchi oqimlardagi asosiy belgilar taqsimotining o‘quv to‘plamidan farqi: &lt; 0,1 — barqaror, 0,1–0,25 — kuzatish, &gt; 0,25 — jiddiy siljish (chegarani qayta kalibrlash yoki modelni qayta o‘qitish tavsiya etiladi).</p>
+</div>
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>Oylik qayta o‘qitish tartibi</h2>
+    <ol class="small" style="padding-left:18px">
+      <li>Pilot davrida (2–4 hafta) tizim passiv ishlaydi, mahalliy normal trafik yig‘iladi, chegara kalibrlanadi.</li>
+      <li>Tahlilchilar insidentlarni «Haqiqiy hujum» / «Soxta ogohlantirish» deb baholaydi.</li>
+      <li>Oy oxirida yorliqlar eksport qilinadi: <code>tahlilchi_yorliqlari.csv</code>.</li>
+      <li>Model mahalliy ma’lumotlar bilan qayta o‘qitiladi: <code>python train/adapt.py --local local_normal.csv --labels tahlilchi_yorliqlari.csv</code>.</li>
+      <li>Yangi model avval passiv rejimda solishtiriladi (Precision, FPR, soxta ogohlantirishlar soni), so‘ng faollashtiriladi.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2>SI modulining o‘z xavfsizligi (2.8-band)</h2>
+    <ul class="small" style="padding-left:18px">
+      <li><b>Chetlab o‘tish (evasion):</b> SI moduli signatura vositalari (Suricata) bilan birga ishlaydi; autoenkoder XGBoost o‘tkazib yuborgan anomaliyalarni P4 sifatida qayd etadi.</li>
+      <li><b>Zaharlash (poisoning):</b> qayta o‘qitishga faqat tahlilchi tasdiqlagan yorliqlar va tekshirilgan normal trafik kiradi.</li>
+      <li><b>Model o‘g‘irlash:</b> API kalit bilan himoyalangan, ichki tarmoqda ishlaydi.</li>
+      <li><b>Siljish:</b> PSI va ogohlantirishlar hajmi har tahlilda kuzatiladi.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

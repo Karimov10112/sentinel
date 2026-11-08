@@ -1,0 +1,5 @@
+{% macro lv(l) %}{% if l %}<span class="pill {{ l }}">{{ l }} · {{ LEVEL_NAME.get(l, '') }}</span>{% else %}<span class="pill low">—</span>{% endif %}{% endmacro %}
+{% macro cat(c) %}{% if c == 'Anomaliya' %}<span class="pill mod mod-anomaly">Noma’lum anomaliya (AE)</span>{% else %}<span class="pill mod mod-ml" title="{{ CLASS_UZ.get(c, c) }}">{{ c }}</span>{% endif %}{% endmacro %}
+{% macro bar(v, color='#1769d1') %}<span class="risk"><i><b style="width: {{ ((v or 0) * 100)|round(0) }}%; background: {{ color }}"></b></i>{{ v|dec }}</span>{% endmacro %}
+{% macro chst(s) %}<span class="pill ch-{{ s }}">{{ STATUS_UZ.get(s, s) }}</span>{% endmacro %}
+{% macro tg(text) %}<div class="tg"><div class="bubble"><div class="who">SOC Sentinel Bot</div>{{ text }}</div></div>{% endmacro %}

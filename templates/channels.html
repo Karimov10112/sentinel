@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chst with context %}
+{% block title %}Kanallar{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Yetkazish kanallari</h1><p>5-qatlam (D-ilova): barcha darajalar SIEM ga, P1–P2 Telegram’ga darhol, P3–P4 soatlik e-pochta dayjestiga, P1 uchun SOAR playbook.</p></div></div>
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Sozlamalar</h2>
+    <form method="post" action="{{ url_for('channels_save') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <h3>Telegram bot</h3>
+      <div class="field"><label>Bot tokeni {% if cfg.telegram_token %}<span class="pill ch-sent">o‘rnatilgan{{ ' (muhit o‘zgaruvchisi)' if env_token }}</span>{% endif %}</label><input type="password" name="telegram_token" placeholder="{{ '••••••••• (o‘zgartirish uchun yangisini kiriting)' if cfg.telegram_token else '123456789:AA...' }}" autocomplete="off">
+        {% if st.telegram_token %}<label class="row small" style="font-weight:400"><input type="checkbox" name="clear_telegram_token" value="1"> tokenni o‘chirish</label>{% endif %}</div>
+      <div class="field"><label>Chat ID (SOC navbatchilari guruhi)</label><input type="text" name="telegram_chat" value="{{ st.telegram_chat }}" placeholder="-1001234567890"></div>
+      <h3 class="mt">SIEM (Wazuh)</h3>
+      <div class="field"><label>JSON jurnal fayli</label><input type="text" name="siem_path" value="{{ st.siem_path }}" placeholder="{{ cfg.siem_path }}"></div>
+      <h3 class="mt">E-pochta dayjesti (ixtiyoriy)</h3>
+      <div class="row"><input type="text" name="smtp_host" value="{{ st.smtp_host }}" placeholder="smtp.korxona.uz" style="flex:1"><input type="text" name="smtp_port" value="{{ st.smtp_port }}" style="width:80px"></div>
+      <div class="row mt"><input type="text" name="smtp_user" value="{{ st.smtp_user }}" placeholder="foydalanuvchi" style="flex:1"><input type="password" name="smtp_pass" placeholder="{{ 'parol o‘rnatilgan' if st.smtp_pass else 'parol' }}" style="flex:1"></div>
+      <div class="field mt"><input type="text" name="smtp_to" value="{{ st.smtp_to }}" placeholder="soc@korxona.uz"></div>
+      <label class="row" style="font-weight:400"><input type="checkbox" name="soar" value="1" {{ 'checked' if st.soar == 'on' }}> P1 insidentlar uchun SOAR playbook yozuvi</label>
+      <button class="btn mt">Saqlash</button>
+    </form>
+    <p class="small muted mt">Bot yaratish: Telegram’da @BotFather → /newbot → token. Botni SOC guruhiga qo‘shing, chat ID ni oling (masalan, @RawDataBot orqali). Token faqat shu kompyuterdagi bazada yoki <code>SOC_BOT_TOKEN</code> muhit o‘zgaruvchisida saqlanadi.</p>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Amallar</h2>
+      <div class="row">
+        <form method="post" action="{{ url_for('channels_test') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn secondary">Telegram sinov xabari</button></form>
+        <form method="post" action="{{ url_for('channels_digest') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn secondary">Dayjestni hozir yuborish ({{ queued }})</button></form>
+        <a class="btn secondary" href="{{ url_for('channels_siem') }}">SIEM jurnali (oxirgi 500)</a>
+      </div>
+    </div>
+    <div class="card mt">
+      <h2>Wazuh sozlamasi</h2>
+      <p class="small">/var/ossec/etc/ossec.conf:</p>
+<pre>&lt;localfile&gt;
+  &lt;log_format&gt;json&lt;/log_format&gt;
+  &lt;location&gt;{{ cfg.siem_path }}&lt;/location&gt;
+&lt;/localfile&gt;</pre>
+      <p class="small">local_rules.xml (to‘liq fayl: <code>integrations/wazuh/local_rules.xml</code>):</p>
+<pre>&lt;rule id="100500" level="12"&gt;
+  &lt;decoded_as&gt;json&lt;/decoded_as&gt;
+  &lt;field name="ai_alert.priority"&gt;P1&lt;/field&gt;
+  &lt;description&gt;SI: kritik hujum $(ai_alert.category)&lt;/description&gt;
+&lt;/rule&gt;</pre>
+    </div>
+  </div>
+</div>
+<div class="card mt">
+  <h2>Xabarlar jurnali</h2>
+  {% if out %}<div class="tbl-wrap"><table><thead><tr><th>Vaqt</th><th>Kanal</th><th>Insident</th><th>Daraja</th><th>Holat</th><th>Matn</th></tr></thead>
+    <tbody>{% for o in out %}<tr><td class="when">{{ o.ts|ts }}</td><td>{{ CHANNEL_UZ.get(o.channel, o.channel) }}</td><td>{% if o.incident_id %}<a href="{{ url_for('incident', iid=o.incident_id) }}">#{{ o.incident_id }}</a>{% endif %}</td><td>{{ o.level }}</td>
+      <td>{{ chst(o.status) }}{% if o.error %}<span class="seg">{{ o.error[:90] }}</span>{% endif %}</td><td class="small wrap">{{ o.text[:140] }}{{ '…' if o.text|length > 140 }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">Xabarlar yo‘q</div>{% endif %}
+</div>
+{% endblock %}

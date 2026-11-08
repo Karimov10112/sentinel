@@ -1,0 +1,12 @@
+{
+ "thr_default": 0.5,
+ "thr_cost": 0.09,
+ "thr_cal95": 0.927906,
+ "thr_cal99": 0.986642,
+ "ae_thr": 0.012259275652468204,
+ "thr_cal95_nottl": 0.9247,
+ "thr_cal99_nottl": 0.983735,
+ "n_feat": 194,
+ "trained_at": "2026-11-08T09:47:01",
+ "xgboost": "3.4.1"
+}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import lv, cat, bar with context %}
+{% block title %}Insidentlar{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Insidentlar</h1><p>Bir xil hujum turi, xizmat, protokol (va manzil) ga ega ogohlantirishlar {{ 60 }} soniyalik oynada bitta insidentga birlashtiriladi. Har bir insident uchun SHAP sabablari va Telegram xabari tayyorlanadi.</p></div>
+  <a class="btn secondary" href="{{ url_for('labels_csv') }}">Tahlilchi yorliqlarini eksport (CSV)</a></div>
+<div class="card">
+  <div class="filters">
+    <a href="{{ url_for('incidents', status=status, verdict=verdict) }}" class="{{ 'on' if not level }}">Barchasi</a>
+    {% for l in ['P1','P2','P3','P4'] %}<a href="{{ url_for('incidents', level=l, status=status, verdict=verdict) }}" class="{{ 'on' if level == l }}">{{ l }}</a>{% endfor %}
+    <span class="muted small" style="margin-left:10px">Holat:</span>
+    <a href="{{ url_for('incidents', level=level, status='open') }}" class="{{ 'on' if status == 'open' }}">Ochiq</a>
+    <a href="{{ url_for('incidents', level=level, status='closed') }}" class="{{ 'on' if status == 'closed' }}">Yopilgan</a>
+    <a href="{{ url_for('incidents', level=level, verdict='tp') }}" class="{{ 'on' if verdict == 'tp' }}">Haqiqiy hujum</a>
+    <a href="{{ url_for('incidents', level=level, verdict='fp') }}" class="{{ 'on' if verdict == 'fp' }}">Soxta</a>
+  </div>
+  {% if rows %}
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>Prioritet</th><th>Hujum turi</th><th>Xizmat / protokol</th><th class="num">Oqimlar</th><th>Ehtimollik</th><th class="num">Bal S</th><th>Asosiy sabablar</th><th>Yorliq (sinov)</th><th>Baho</th><th>Vaqt</th></tr></thead>
+    <tbody>{% for i in rows %}<tr>
+      <td><a href="{{ url_for('incident', iid=i.id) }}">#{{ i.id }}</a></td><td>{{ lv(i.level) }}</td><td>{{ cat(i.category) }}</td>
+      <td class="small">{{ i.service }} / {{ i.proto }}{% if i.dstip %}<span class="seg">→ {{ i.dstip }}</span>{% endif %}</td>
+      <td class="num">{{ i.count|num }}</td><td>{{ bar(i.max_p, '#cf3b3b') }}</td><td class="num">{{ i.max_score|dec }}</td>
+      <td class="small wrap">{% for r in i.reasons[:2] %}{{ r.name }} = <b>{{ r.value }}</b>{{ '; ' if not loop.last }}{% endfor %}</td>
+      <td class="small">{% if i.truth_true or i.truth_false %}{{ i.truth_true }} hujum / {{ i.truth_false }} normal{% else %}—{% endif %}</td>
+      <td>{% if i.verdict %}<span class="pill {{ i.verdict }}">{{ 'Haqiqiy' if i.verdict == 'tp' else 'Soxta' }}</span>{% elif i.status == 'closed' %}<span class="pill closed">Yopilgan</span>{% endif %}</td>
+      <td class="when">{{ i.first_ts|ts }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="row mt">{% if page > 1 %}<a class="btn secondary small" href="{{ url_for('incidents', level=level, status=status, verdict=verdict, page=page - 1) }}">← Oldingi</a>{% endif %}{% if more %}<a class="btn secondary small" href="{{ url_for('incidents', level=level, status=status, verdict=verdict, page=page + 1) }}">Keyingi →</a>{% endif %}</div>
+  {% else %}<div class="empty">Insidentlar yo‘q</div>{% endif %}
+</div>
+{% endblock %}

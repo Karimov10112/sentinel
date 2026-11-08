@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Kalibrlash{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Chegara va mahalliy trafikka moslashtirish</h1><p>Diplom, 3.6-band va C-ilova: o‘quv ma’lumotlarida tanlangan chegara real tarmoqqa ko‘chmaydi (taqsimot siljishi), shuning uchun pilot davrida chegara korxonaning o‘z normal trafigi bo‘yicha kalibrlanadi.</p></div></div>
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Faol sozlamalar</h2>
+    <form method="post" action="{{ url_for('calibration_settings') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field"><label>Qaror chegarasi θ</label>
+        {% for k, v in th.items() %}<label class="row" style="font-weight:400; flex-wrap:nowrap"><input type="radio" name="thr_mode" value="{{ k }}" {{ 'checked' if k == THR_MODE }}> <span><b>{{ v|dec(4) }}</b> — {{ THR_UZ[k] }}</span></label>{% endfor %}
+      </div>
+      <div class="field"><label>Asosiy model</label>
+        <label class="row" style="font-weight:400; flex-wrap:nowrap"><input type="radio" name="variant" value="full" {{ 'checked' if st.variant == 'full' }}> <span>XGBoost, barcha 194 belgi (diplom jadvallari shu modelda)</span></label>
+        <label class="row" style="font-weight:400; flex-wrap:nowrap"><input type="radio" name="variant" value="nottl" {{ 'checked' if st.variant == 'nottl' }}> <span>XGBoost, TTL belgilarisiz (sttl, dttl, ct_state_ttl) — boshqa tarmoqqa ko‘chirishda xavfsizroq (3.5-band tavsiyasi)</span></label>
+      </div>
+      <div class="field"><label>Guruhlash oynasi W, soniya</label><input type="number" name="window" value="{{ st.window }}" min="5" max="3600"></div>
+      <button class="btn">Saqlash</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Mahalliy kalibrlash (pilot haftasi)</h2>
+    <form method="post" action="{{ url_for('calibration_run') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <p class="small">Korxonaning hujumsiz deb tekshirilgan normal oqimlari (UNSW formatidagi CSV/JSON). Fayl tanlanmasa — diplomdagidek UNSW-NB15 sinovidagi normal oqimlarning 20% i (7 400 ta) «pilot haftasi» sifatida ishlatiladi.</p>
+      <div class="dropzone"><input type="file" name="file" accept=".csv,.json,.jsonl"></div>
+      <div class="row mt"><span>Persentil</span><select name="percentile" style="width:110px"><option value="95">95 (FPR ≈ 5%)</option><option value="99">99 (FPR ≈ 1%)</option><option value="97.5">97,5</option><option value="90">90</option></select>
+        <button class="btn">Kalibrlash</button></div>
+    </form>
+    {% if cals %}<h3 class="mt">Kalibrlashlar tarixi</h3><table><tbody>{% for c in cals %}<tr><td class="when">{{ c.created|ts }}</td><td class="small">{{ c.source }}</td><td class="num">{{ c.n|num }}</td><td class="num">{{ c.percentile }}%</td><td class="num"><b>{{ c.thr|dec(4) }}</b></td></tr>{% endfor %}</tbody></table>{% endif %}
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>Moslashtirish usullari natijalari (3.6-jadval, {{ M.adapt.n_eval|num }} oqimli baholash to‘plami)</h2>
+  <table><thead><tr><th>Usul</th><th class="num">Chegara</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">FPR</th><th class="num">Soxta ogohlantirishlar</th></tr></thead>
+    <tbody>{% for k, v in M.adapt.items() if v is mapping %}<tr class="{{ 'best' if '95' in k }}"><td>{{ k }}</td><td class="num">{{ v.thr|dec }}</td><td class="num">{{ v.precision|dec }}</td><td class="num">{{ v.recall|dec }}</td><td class="num">{{ v.f1|dec }}</td><td class="num">{{ v.fpr|pct }}</td><td class="num">{{ v.fp|num }}</td></tr>{% endfor %}</tbody></table>
+  <p class="small muted mt">Kalibrlash namunasi: {{ M.adapt.n_cal|num }} ta normal oqim; baholash undan kesishmaydigan {{ M.adapt.n_eval|num }} oqimda. Eng sodda usul — chegarani mahalliy normal trafikning 95-persentiliga o‘rnatish — soxta ogohlantirishlarni {{ M.adapt['A. Asl model'].fp|num }} dan {{ M.adapt['B. Kalibrlangan chegara (95-persentil)'].fp|num }} taga kamaytiradi.</p>
+</div>
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>Chegaraning ta’siri (3.14-rasm)</h2>
+    {% set c = M.threshold_curve %}
+    <svg viewBox="0 0 400 230" width="100%">
+      <rect x="40" y="10" width="350" height="180" fill="#fafbfd" stroke="#e2e7ef"/>
+      {% for key, col in [('recall', '#0e8a7d'), ('precision', '#1769d1'), ('fpr', '#cf3b3b')] %}
+        {% set pts = [] %}{% for r in c %}{% set _ = pts.append(((40 + r.thr * 350)|round(1))|string ~ ',' ~ ((190 - r[key] * 180)|round(1))|string) %}{% endfor %}
+        <polyline points="{{ pts|join(' ') }}" fill="none" stroke="{{ col }}" stroke-width="2"/>
+      {% endfor %}
+      {% for t in [THR] %}<line x1="{{ 40 + t * 350 }}" y1="10" x2="{{ 40 + t * 350 }}" y2="190" stroke="#1d2b44" stroke-dasharray="4 3"/>{% endfor %}
+      <text x="215" y="215" font-size="11" text-anchor="middle" fill="#5d6b7e">chegara θ (0 … 1)</text>
+    </svg>
+    <div class="legend"><span style="--c:#0e8a7d">Recall</span><span style="--c:#1769d1">Precision</span><span style="--c:#cf3b3b">FPR</span><span style="--c:#1d2b44">faol θ</span></div>
+  </div>
+  <div class="card">
+    <h2>Xatolar narxi bo‘yicha chegara (3.1)</h2>
+    <div class="formula">C(θ) = c_FN·FN(θ) + c_FP·FP(θ),  c_FN : c_FP = 10 : 1</div>
+    <div class="kv mt"><div>Validatsiyada optimal θ</div><div><b>{{ M.cost_threshold.theta }}</b></div><div>Sinovda Recall / FPR</div><div>{{ M.cost_threshold.test_recall|pct }} / {{ M.cost_threshold.test_fpr|pct }}</div></div>
+    <p class="small muted">O‘quv taqsimotida tanlangan chegara sinov to‘plamida juda ko‘p soxta ogohlantirish beradi — bu taqsimot siljishini tasdiqlaydi va mahalliy kalibrlash zarurligini ko‘rsatadi.</p>
+    <h3 class="mt">Mahalliy namuna hajmining ta’siri (qayta o‘qitish, 3.15-b rasm)</h3>
+    <table><thead><tr><th class="num">Qo‘shilgan oqimlar</th><th class="num">FPR</th></tr></thead><tbody>{% for r in M.adapt_sizes %}<tr><td class="num">{{ r.n|num }}</td><td class="num">{{ r.fpr|pct }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+</div>
+{% endblock %}

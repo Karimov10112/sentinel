@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import lv, cat, bar, chst, tg with context %}
+{% block title %}Insident #{{ inc.id }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>#{{ inc.id }} · {{ CLASS_UZ.get(inc.category, 'Noma’lum anomaliya (autoenkoder)') }}</h1>
+    <p>{{ inc.service }} / {{ inc.proto }}{% if inc.dstip %} → {{ inc.dstip }}{% endif %} · {{ inc.first_ts|t }} — {{ inc.last_ts|t }} · {{ inc.count|num }} ta oqim</p></div>
+  <div class="row">{{ lv(inc.level) }}{% if inc.verdict %}<span class="pill {{ inc.verdict }}">{{ 'Haqiqiy hujum' if inc.verdict == 'tp' else 'Soxta ogohlantirish' }}</span>{% endif %}</div>
+</div>
+<div class="grid grid-main">
+  <div>
+    <div class="card">
+      <h2>Xulosa</h2>
+      <div class="kv">
+        <div>Taxminiy tur</div><div>{{ cat(inc.category) }} <span class="small muted">guruh: {{ GROUP.get(inc.category, '—') }}{% if MITRE.get(inc.category) %} · ATT&CK <span class="mitre">{{ MITRE[inc.category] }}</span>{% endif %}</span></div>
+        <div>Model ishonchi</div><div>{{ bar(inc.max_p, '#cf3b3b') }} (chegara θ = {{ inc.thr|dec }}, model: {{ 'TTL belgilarisiz' if inc.variant == 'nottl' else 'barcha belgilar' }})</div>
+        <div>Prioritet bali S</div><div><b>{{ inc.max_score|dec }}</b> — {{ CHANNEL.get(inc.level) }}</div>
+        <div>Tavsiya</div><div>{{ RECOMMEND.get(inc.category, '') }}</div>
+        {% if inc.srcips %}<div>Manbalar</div><div class="ip">{{ inc.srcips|join(', ') }}</div>{% endif %}
+        {% if inc.truth_true or inc.truth_false %}<div>Sinov yorlig‘i</div><div>{{ inc.truth_true }} ta haqiqiy hujum, {{ inc.truth_false }} ta normal oqim</div>{% endif %}
+      </div>
+      <p class="small muted mt">Hujum turi «taxminiy tur» sifatida ko‘rsatiladi: UNSW-NB15 da DoS, Analysis, Backdoor va Exploits oqim belgilari bo‘yicha kuchli chalkashadi (diplom, 3.4-band), shuning uchun tavsiyalar turlar guruhiga moslashtirilgan.</p>
+    </div>
+    {% if shap %}
+    <div class="card mt">
+      <h2>Qaror sabablari (TreeSHAP, birinchi oqim)</h2>
+      {% set mx = (shap['items']|map(attribute='v')|map('abs')|max) or 1 %}
+      {% for s in shap['items'] %}<div class="shapbar"><span title="{{ s.f }}">{{ s.name }}</span><div class="axis">
+        {% if s.v >= 0 %}<b style="left:50%; width: {{ (s.v / mx * 50)|round(1) }}%; background:#cf3b3b"></b>{% else %}<b style="right:50%; width: {{ (-s.v / mx * 50)|round(1) }}%; background:#1769d1"></b>{% endif %}</div>
+        <span class="num">{{ '%+.2f'|format(s.v) }}</span></div>{% endfor %}
+      <p class="small muted">Qizil — hujum tomonga, ko‘k — normal tomonga ta’sir (log-odds). Bazaviy qiymat: {{ shap.base }}. Autoenkoder xatosi: {{ shap.ae|dec(4) }}.</p>
+      <h3 class="mt">Hujum turi ehtimolliklari (10 sinfli XGBoost)</h3>
+      {% for c, x in shap.pm|dictsort(by='value', reverse=true) %}{% if loop.index <= 5 %}<div class="hbar" style="grid-template-columns: 130px 1fr 60px"><span class="small">{{ c }}</span><div class="track"><div class="fill" style="width: {{ (x * 100)|round(1) }}%"></div></div><span class="num small">{{ x|pct }}</span></div>{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="card mt">
+      <h2>Insidentdagi oqimlar ({{ alerts|length }}{{ '+' if alerts|length >= 300 }})</h2>
+      <div class="tbl-wrap"><table><thead><tr><th>Vaqt</th><th>p</th><th class="num">AE xatosi</th><th class="num">S</th><th>Daraja</th><th>Holat</th><th class="num">sbytes</th><th class="num">dbytes</th><th class="num">sttl</th><th>Yorliq</th></tr></thead>
+        <tbody>{% for a in alerts[:100] %}<tr><td class="when">{{ a.ts|ts }}</td><td class="num">{{ a.p|dec }}</td><td class="num">{{ a.ae|dec(4) }}{{ ' ⚑' if a.ae_flag }}</td><td class="num">{{ a.score|dec }}</td><td>{{ a.level }}</td><td>{{ a.state }}</td><td class="num">{{ a.sbytes|int|num }}</td><td class="num">{{ a.dbytes|int|num }}</td><td class="num">{{ a.sttl|int }}</td><td class="small">{{ a.truth or '—' }}</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Telegram xabari</h2>
+      {{ tg(inc.telegram) }}
+      <form method="post" action="{{ url_for('incident_resend', iid=inc.id) }}" class="mt"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn secondary small">Telegram’ga qayta yuborish</button></form>
+    </div>
+    <div class="card mt">
+      <h2>Tahlilchi bahosi</h2>
+      <form method="post" action="{{ url_for('incident_verdict', iid=inc.id) }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <div class="field"><label>Natija</label><select name="verdict"><option value="">— baholanmagan —</option><option value="tp" {{ 'selected' if inc.verdict == 'tp' }}>Haqiqiy hujum</option><option value="fp" {{ 'selected' if inc.verdict == 'fp' }}>Soxta ogohlantirish</option></select></div>
+        <div class="field"><label>Holat</label><select name="status"><option value="open" {{ 'selected' if inc.status == 'open' }}>Ochiq</option><option value="closed" {{ 'selected' if inc.status == 'closed' }}>Yopilgan</option></select></div>
+        <div class="field"><label>Tahlilchi</label><input type="text" name="analyst" value="{{ inc.analyst }}"></div>
+        <div class="field"><label>Izoh</label><textarea name="note" style="min-height:80px; font-family:inherit">{{ inc.note }}</textarea></div>
+        <button class="btn">Saqlash</button>
+      </form>
+      <p class="small muted mt">Baholar model sifatini (Precision) kuzatish va oylik qayta o‘qitish uchun yorliq sifatida ishlatiladi (NIST AI RMF «Measure», «Manage»).</p>
+    </div>
+    <div class="card mt">
+      <h2>Yetkazish</h2>
+      {% for m in msgs %}<div style="border-bottom:1px dashed var(--line); padding:6px 0" class="small"><b>{{ CHANNEL_UZ.get(m.channel, m.channel) }}</b> {{ chst(m.status) }} <span class="muted">{{ m.ts|ts }}</span>{% if m.error %}<div class="muted">{{ m.error }}</div>{% endif %}{% if m.channel == 'soar' %}<div>{{ m.text }}</div>{% endif %}</div>{% else %}<p class="muted">—</p>{% endfor %}
+      <h3 class="mt">SIEM yozuvi (Wazuh)</h3>
+      <pre style="max-height:260px">{{ inc.siem|pjson }}</pre>
+    </div>
+  </div>
+</div>
+{% endblock %}

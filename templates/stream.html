@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Oqimlar tahlili{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Oqimlarni qayta ishlash (prototip)</h1><p>B-ilovadagi ogohlantirish xizmati: oqimlar 500 tadan paketlarda tahlil qilinadi, kalibrlangan chegaradan o‘tganlar prioritetlanadi, insidentlarga guruhlanadi va kanallarga yuboriladi.</p></div></div>
+<div class="grid grid-2">
+  <div class="card">
+    <h2>UNSW-NB15 sinov oqimi</h2>
+    <form method="post" action="{{ url_for('stream_run') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="row"><span>Oqimlar soni</span><select name="n" style="width:130px"><option>1000</option><option selected>5000</option><option>10000</option><option value="20000">20 000 (3.8-jadval)</option></select>
+        <span>tezlik</span><input type="number" name="rate" value="200" min="1" max="100000" style="width:100px"><span class="small muted">oqim/s</span>
+        <span>seed</span><input type="number" name="seed" value="1" style="width:80px"></div>
+      <label class="row mt" style="font-weight:400"><input type="checkbox" name="send" value="1"> P1/P2 insidentlarini Telegram’ga haqiqatan yuborish</label>
+      <button class="btn mt">▶ Qayta ishlash</button>
+    </form>
+    <p class="small muted mt">Oqimlar kalibrlash namunasiga kirmagan {{ M.prototype.flows|num }} talik to‘plamdan olinadi; ularda haqiqiy yorliqlar bor, shuning uchun aniqlik va to‘liqlik hisoblanadi. UNSW-NB15 bo‘linmasida vaqt va IP manzillar yo‘q — oqimlar berilgan tezlikda keladi deb faraz qilinadi (diplom, 3.6-band).</p>
+  </div>
+  <div class="card">
+    <h2>O‘z faylingiz</h2>
+    <form method="post" action="{{ url_for('stream_run') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="dropzone"><input type="file" name="file" accept=".csv,.json,.jsonl,.txt" required></div>
+      <p class="small">UNSW-NB15 formatidagi oqimlar: CSV yoki JSON. Ixtiyoriy ustunlar: <code>ts</code>/<code>stime</code> (vaqt), <code>srcip</code>, <code>dstip</code>, <code>label</code>, <code>attack_cat</code>.</p>
+      <div class="row"><span>tezlik (vaqt ustuni bo‘lmasa)</span><input type="number" name="rate" value="200" style="width:100px"></div>
+      <label class="row mt" style="font-weight:400"><input type="checkbox" name="send" value="1"> Telegram’ga yuborish</label>
+      <button class="btn mt">Yuklash va tahlil qilish</button>
+    </form>
+    <p class="small mt">Namunalar: <a href="{{ url_for('sample', name='stream_20000.csv') }}">stream_20000.csv</a> · <a href="{{ url_for('sample', name='pilot_normal.csv') }}">pilot_normal.csv</a>{% for f in ['demo_with_ips.csv'] %} · <a href="{{ url_for('sample', name=f) }}">{{ f }}</a>{% endfor %}</p>
+  </div>
+</div>
+<div class="card mt">
+  <h2>Tahlillar tarixi</h2>
+  {% if batches %}
+  <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Vaqt</th><th>Nomi</th><th class="num">Oqimlar</th><th class="num">Ogohl.</th><th class="num">Insident</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">θ</th><th class="num">oqim/s</th></tr></thead>
+    <tbody>{% for b in batches %}{% set s = b.summary %}<tr><td><a href="{{ url_for('batch', bid=b.id) }}">#{{ b.id }}</a></td><td class="when">{{ b.created|ts }}</td><td class="small wrap"><a href="{{ url_for('batch', bid=b.id) }}">{{ b.name }}</a></td>
+      <td class="num">{{ s.get('flows', 0)|num }}</td><td class="num">{{ s.get('alerts', 0)|num }}</td><td class="num">{{ s.get('incidents_new', 0) }}</td>
+      <td class="num">{{ s.truth.precision|pct if s.truth else '—' }}</td><td class="num">{{ s.truth.recall|pct if s.truth else '—' }}</td><td class="num">{{ s.get('thr')|dec }}</td><td class="num">{{ s.get('throughput', 0)|num }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">Hali tahlil qilinmagan</div>{% endif %}
+  <form method="post" action="{{ url_for('reset') }}" class="mt" onsubmit="return confirm('Barcha ogohlantirishlar, insidentlar va xabarlar o‘chiriladi. Davom etilsinmi?')"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn danger small">Bazani tozalash</button></form>
+</div>
+{% endblock %}

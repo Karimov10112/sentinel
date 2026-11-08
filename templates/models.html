@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}SI modellar{% endblock %}
+{% block content %}
+{% set d = M.dataset %}
+<div class="page-head"><div><h1>SI modellari: UNSW-NB15 tajribasi</h1><p>Diplomning 3.2–3.6-bandlaridagi tajribalar (<code>python train/train_models.py</code> natijalari, <code>models/metrics.json</code>). Sinov to‘plami hech qanday tanlovda ishtirok etmagan.</p></div></div>
+<div class="grid grid-4">
+  <div class="card stat"><div class="l">O‘qitish / validatsiya</div><div class="v">{{ d.n_train|num }}</div><div class="sub">+ {{ d.n_val|num }} validatsiya (10%, stratifikatsiya)</div></div>
+  <div class="card stat"><div class="l">Sinov to‘plami</div><div class="v">{{ d.n_test|num }}</div><div class="sub">hujumlar ulushi {{ d.test_attack|pct }}</div></div>
+  <div class="card stat"><div class="l">Belgilar vektori</div><div class="v blue">{{ d.n_feat }}</div><div class="sub">39 sonli (log1p + standartlash) + one-hot</div></div>
+  <div class="card stat"><div class="l">Hujum turlari</div><div class="v red">9</div><div class="sub">+ normal trafik</div></div>
+</div>
+
+<div class="card mt">
+  <h2>Binar tasnif natijalari (3.3-jadval, sinov to‘plami)</h2>
+  {% set best = M.binary.values()|map(attribute='f1')|max %}
+  <div class="tbl-wrap"><table><thead><tr><th>Model</th><th class="num">Accuracy</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">FPR</th><th class="num">ROC-AUC</th><th class="num">O‘qitish, s</th><th class="num">ms / 1 000</th></tr></thead>
+    <tbody>{% for n, x in M.binary.items() %}<tr class="{{ 'best' if n == 'XGBoost' }}"><td>{{ n }}</td><td class="num">{{ x.accuracy|dec }}</td><td class="num">{{ x.precision|dec }}</td><td class="num">{{ x.recall|dec }}</td><td class="num"><b>{{ x.f1|dec }}</b></td><td class="num">{{ x.fpr|pct }}</td><td class="num">{{ x.roc_auc|dec if x.roc_auc is defined else '—' }}</td><td class="num">{{ x.train_s if x.train_s is defined else '—' }}</td><td class="num">{{ x.ms_per_1000 if x.ms_per_1000 is defined else '—' }}</td></tr>{% endfor %}</tbody></table></div>
+  <p class="small muted mt">Nazoratli modellar hujumlarning 98–99% ini aniqlaydi, lekin sinovdagi normal trafikning 27–33% ini ham hujum deb belgilaydi (taqsimot siljishi, 3.5-band). DNN va autoenkoder NumPy’da A-ilovadagi arxitektura bilan amalga oshirilgan.</p>
+</div>
+
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>ROC egri chiziqlari (3.5-rasm)</h2>
+    {% set colors = ['#7f8c8d', '#2a8c82', '#1f3a5f', '#7a5cd6', '#0e8a7d', '#d4a72c'] %}
+    <svg viewBox="0 0 330 290" width="100%"><rect x="40" y="10" width="270" height="250" fill="#fafbfd" stroke="#e2e7ef"/><line x1="40" y1="260" x2="310" y2="10" stroke="#c3cede" stroke-dasharray="4 4"/>
+      {% for n, x in M.binary.items() if x.roc is defined %}{% set pts = [] %}{% for i in range(x.roc.fpr|length) %}{% set _ = pts.append(((40 + x.roc.fpr[i] * 270)|round(1))|string ~ ',' ~ ((260 - x.roc.tpr[i] * 250)|round(1))|string) %}{% endfor %}
+        <polyline points="{{ pts|join(' ') }}" fill="none" stroke="{{ colors[loop.index0 % 6] }}" stroke-width="2"/>{% endfor %}
+      <text x="175" y="283" font-size="11" text-anchor="middle" fill="#5d6b7e">FPR</text><text x="14" y="135" font-size="11" text-anchor="middle" fill="#5d6b7e" transform="rotate(-90 14 135)">TPR</text></svg>
+    <div class="chips">{% for n, x in M.binary.items() if x.roc is defined %}<span class="chip" style="border-left:4px solid {{ colors[loop.index0 % 6] }}">{{ n }} · {{ x.roc_auc|dec }}</span>{% endfor %}</div>
+  </div>
+  <div class="card">
+    <h2>Autoenkoder tiklash xatosi (3.7-rasm)</h2>
+    {% set h = M.ae_hist %}{% set mx = ((h.normal + h.attack)|max) or 1 %}{% set n = h.normal|length %}
+    <svg viewBox="0 0 400 220" width="100%"><line x1="20" y1="180" x2="390" y2="180" stroke="#cfd7e3"/>
+      {% for i in range(n) %}{% set x = 20 + i * 370 / n %}
+        <rect x="{{ x|round(1) }}" y="{{ (180 - h.normal[i] / mx * 160)|round(1) }}" width="{{ (370 / n * 0.9)|round(1) }}" height="{{ (h.normal[i] / mx * 160)|round(1) }}" fill="#1769d1" opacity=".55"/>
+        <rect x="{{ x|round(1) }}" y="{{ (180 - h.attack[i] / mx * 160)|round(1) }}" width="{{ (370 / n * 0.9)|round(1) }}" height="{{ (h.attack[i] / mx * 160)|round(1) }}" fill="#cf3b3b" opacity=".55"/>
+        {% if h.bins[i] <= h.thr < h.bins[i + 1] %}<line x1="{{ x }}" y1="10" x2="{{ x }}" y2="180" stroke="#1d2b44" stroke-dasharray="4 3"/>{% endif %}{% endfor %}
+      <text x="205" y="205" font-size="10" text-anchor="middle" fill="#5d6b7e">e(x), logarifmik shkala: {{ h.bins[0]|dec(4) }} … {{ h.bins[-1]|dec(1) }}</text></svg>
+    <div class="legend"><span style="--c:#1769d1">Normal</span><span style="--c:#cf3b3b">Hujum</span><span style="--c:#1d2b44">θ_AE = {{ h.thr|dec(4) }} (95-persentil)</span></div>
+    <h3 class="mt">O‘qitish egri chiziqlari (3.6-rasm)</h3>
+    <p class="small">DNN: {{ M.curves.dnn|length }} davr (erta to‘xtatish), validatsiya xatosi {{ M.curves.dnn[0][1]|dec(4) }} → {{ (M.curves.dnn|map(attribute=1)|min)|dec(4) }}. Autoenkoder: {{ M.curves.ae|length }} davr, {{ M.curves.ae[0][1]|dec(4) }} → {{ (M.curves.ae|map(attribute=1)|min)|dec(5) }}.</p>
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>Hujum turlari bo‘yicha aniqlash ulushi (3.8-rasm)</h2>
+  <div class="tbl-wrap"><table><thead><tr><th>Model</th>{% for c in CLASSES[1:] %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for n, r in M.by_category.items() %}<tr><td>{{ n }}</td>{% for c in CLASSES[1:] %}{% set v = r[c] %}<td class="num" style="background: rgba(14,138,125,{{ (v * 0.35)|round(2) }})">{{ (v * 100)|round(1) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+</div>
+
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>Ko‘p sinfli tasnif — XGBoost (3.4-jadval)</h2>
+    {% set mc = M.multiclass['XGBoost'] %}
+    <table><thead><tr><th>Sinf</th><th class="num">Sinovda</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
+      <tbody>{% for c, x in mc.per_class.items() %}<tr><td>{{ c }}</td><td class="num">{{ x.n|num }}</td><td class="num">{{ x.precision|dec(2) }}</td><td class="num">{{ x.recall|dec(2) }}</td><td class="num"><b>{{ x.f1|dec(2) }}</b></td></tr>{% endfor %}
+      <tr><td><b>Umumiy</b></td><td class="num">{{ d.n_test|num }}</td><td class="num" colspan="3">Accuracy {{ mc.accuracy|dec }} · makro-F1 {{ mc.macro_f1|dec }} · vaznli F1 {{ mc.weighted_f1|dec }}</td></tr></tbody></table>
+    <p class="small muted mt">Haqiqiy hujumlar ichida to‘g‘ri aniqlangan tur: {{ mc.type_correct_in_attacks|pct }}.{% if M.multiclass['DNN (MLP)'] %} DNN: Accuracy {{ M.multiclass['DNN (MLP)'].accuracy|dec }}, makro-F1 {{ M.multiclass['DNN (MLP)'].macro_f1|dec }}.{% endif %}</p>
+  </div>
+  <div class="card">
+    <h2>Chalkashlik matritsasi, % (3.9-rasm)</h2>
+    <div class="tbl-wrap"><table class="heat"><thead><tr><th></th>{% for c in CLASSES %}<th>{{ c[:4] }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for row in mc.confusion_pct %}<tr><th style="text-align:right">{{ CLASSES[loop.index0] }}</th>{% set ri = loop.index0 %}{% for v in row %}<td style="background: rgba({{ '14,138,125' if loop.index0 == ri else '207,59,59' }},{{ ([v / 100, 1]|min * 0.85)|round(2) }}); color: {{ '#fff' if v > 55 else '#1d2b44' }}">{{ v|round(0)|int }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+    <p class="small muted">Qator — haqiqiy sinf, ustun — bashorat. DoS, Analysis, Backdoor va Exploits o‘zaro kuchli chalkashadi.</p>
+  </div>
+</div>
+
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>SHAP: belgilarning global ahamiyati (3.11-rasm)</h2>
+    {% set g = M.shap.global %}{% set mx = g[0].mean_abs %}
+    {% for f in g %}<div class="hbar" style="grid-template-columns: 170px 1fr 50px"><code class="small" title="{{ UZ.get(f.feature, f.feature) }}">{{ f.feature }}</code><div class="track"><div class="fill" style="width: {{ (f.mean_abs / mx * 100)|round(1) }}%; background:{{ '#cf3b3b' if f.feature in ('sttl', 'dttl', 'ct_state_ttl') else '#1769d1' }}"></div></div><span class="num small">{{ f.mean_abs|dec(2) }}</span></div>{% endfor %}
+    <p class="small muted">Qizil — topologiyaga bog‘liq TTL belgilari. 3 000 ta sinov oqimi, TreeSHAP.</p>
+  </div>
+  <div class="card">
+    <h2>SHAP qiymatlari taqsimoti (3.12-rasm)</h2>
+    <svg viewBox="0 0 420 300" width="100%"><line x1="230" y1="5" x2="230" y2="290" stroke="#b8c2d0"/>
+      {% for b in M.shap.beeswarm %}{% set y = 18 + loop.index0 * 28 %}{% set vs = b.value %}{% set vmin = vs|min %}{% set vmax = vs|max %}
+        <text x="122" y="{{ y + 4 }}" font-size="10" text-anchor="end" fill="#1d2b44">{{ b.feature }}</text>
+        {% for s in b.shap %}{% set t = ((vs[loop.index0] - vmin) / ((vmax - vmin) or 1)) %}<circle cx="{{ (230 + [[s, -6]|max, 6]|min * 30)|round(1) }}" cy="{{ (y + ((loop.index0 * 7919) % 13) - 6)|round(1) }}" r="1.6" fill="rgb({{ (40 + t * 190)|int }}, {{ (90 - t * 50)|int }}, {{ (210 - t * 170)|int }})" opacity=".7"/>{% endfor %}
+      {% endfor %}</svg>
+    <p class="small muted">Har nuqta — bitta oqim; rang — belgi qiymati (ko‘k past, qizil yuqori); o‘ngga — hujum tomonga.</p>
+  </div>
+</div>
+
+<div class="grid grid-2 mt">
+  <div class="card">
+    <h2>Taqsimot siljishi (3.13-rasm)</h2>
+    {% set s = M.shift %}
+    <div class="kv"><div>O‘quvdagi normal oqimlarda sttl = 254</div><div><b>{{ s.sttl254_train_normal|pct }}</b></div><div>Sinovdagi normal oqimlarda sttl = 254</div><div><b>{{ s.sttl254_test_normal|pct }}</b></div>
+      <div>XGBoost soxta ogohlantirishlarida sttl = 254</div><div><b>{{ s.fp_with_sttl254|pct }}</b> ({{ s.fp|num }} tadan)</div></div>
+    <h3 class="mt">TTL belgilarini olib tashlash (3.5-jadval)</h3>
+    <table><thead><tr><th>Belgilar</th><th class="num">AUC</th><th class="num">FPR 0,5</th><th class="num">F1 0,5</th><th class="num">FPR kal.</th><th class="num">Recall kal.</th><th>SHAP №1</th></tr></thead>
+      <tbody>{% for k, v in M.ttl_ablation.items() %}<tr><td class="small">{{ k }}</td><td class="num">{{ v.roc_auc|dec }}</td><td class="num">{{ v.fpr_05|pct }}</td><td class="num">{{ v.f1_05|dec }}</td><td class="num">{{ v.fpr_cal|pct }}</td><td class="num">{{ v.recall_cal|pct }}</td><td><code class="small">{{ v.top_feature }}</code></td></tr>{% endfor %}</tbody></table>
+    <p class="small muted mt">TTL belgilarisiz model sifatni deyarli yo‘qotmaydi, lekin FPR ham kamaymaydi — siljishni belgilar tanlovi emas, mahalliy kalibrlash hal qiladi. Konsolda ikkala model ham mavjud («Kalibrlash» sahifasi).</p>
+  </div>
+  <div class="card">
+    <h2>Prioritet darajalari (3.7-jadval, asl chegara)</h2>
+    <div class="formula">S = p·(0,5 + 0,5·w_tur) + 0,25·[e(x) &gt; θ_AE]·[p &lt; θ]   (3.2)</div>
+    <table class="mt"><thead><tr><th>Daraja</th><th class="num">Ogohl.</th><th class="num">Haqiqiy</th><th class="num">Soxta</th><th class="num">Precision</th><th>Kanal</th></tr></thead>
+      <tbody>{% for k, v in M.priority.levels.items() %}<tr><td><span class="pill {{ k }}">{{ k }}</span></td><td class="num">{{ v.alerts|num }}</td><td class="num">{{ v.true|num }}</td><td class="num">{{ v.false|num }}</td><td class="num">{{ v.precision|pct }}</td><td class="small">{{ v.channel }}</td></tr>{% endfor %}</tbody></table>
+    <p class="small muted mt">P1–P2 ga hujumlarning {{ M.priority.attacks_in_p1p2|pct }} i tushadi; soxta ogohlantirishlarning {{ M.priority.fp_in_p3p4|pct }} i P3–P4 ga to‘planadi. Tezkor oqimdagi soxta ulush: {{ M.priority.fp_share_all|pct }} → {{ M.priority.fp_share_p1p2|pct }}.</p>
+    <p class="small">w_tur: {% for c, w in SEV.items() if c != 'Normal' %}{{ c }} {{ w }}{{ '; ' if not loop.last }}{% endfor %}</p>
+    <h3 class="mt">Guruhlash (3.17-rasm, 200 oqim/s)</h3>
+    <table><tbody>{% for g in M.grouping.by_window %}<tr><td>W = {{ g.window }} s</td><td class="num">{{ M.grouping.alerts|num }} → <b>{{ g.incidents|num }}</b> insident</td><td class="num">{{ (M.grouping.alerts / g.incidents)|round(0)|int }} baravar</td></tr>{% endfor %}</tbody></table>
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>Ogohlantirish xizmati prototipi (3.8-jadval)</h2>
+  {% set p = M.prototype %}
+  <div class="tbl-wrap"><table><tbody>
+    <tr><td>Qayta ishlangan oqimlar / ulardan hujumlar</td><td class="num">{{ p.flows|num }} / {{ p.attacks|num }}</td><td>Ogohlantirishlar (kalibrlangan chegara {{ p.thr|dec }})</td><td class="num">{{ p.alerts|num }}</td></tr>
+    <tr><td>Haqiqiy hujumga to‘g‘ri kelgan</td><td class="num">{{ p.true_alerts|num }} (Precision {{ p.precision|pct }})</td><td>Aniqlangan hujumlar (Recall)</td><td class="num">{{ p.recall|pct }}</td></tr>
+    <tr><td>Insidentlar (60 s oyna)</td><td class="num">{{ p.incidents }} ({{ (p.alerts / p.incidents)|round(0)|int }} baravar kam)</td><td>Ulardan P1 / P2</td><td class="num">{{ p.inc_p1 }} / {{ p.inc_p2 }}</td></tr>
+    <tr><td>P1 / P2 ogohlantirishlari aniqligi</td><td class="num">{{ p.prec_p1|pct }} / {{ p.prec_p2|pct }}</td><td>Bitta insident uchun SHAP</td><td class="num">{{ p.ms_shap_incident }} ms</td></tr>
+  </tbody></table></div>
+  <p class="small muted mt">Modellar o‘qitilgan: {{ cfg.trained_at|replace('T', ' ') }} · XGBoost {{ cfg.xgboost }}. Xuddi shu sinovni «Oqimlar tahlili» sahifasida 20 000 oqim bilan qayta o‘tkazish mumkin.</p>
+</div>
+{% endblock %}

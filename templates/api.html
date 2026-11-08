@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}REST API{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>REST API</h1><p>Oqim generatori (Zeek/Argus), SIEM va boshqa tizimlar bilan integratsiya.</p></div></div>
+{% if not api_key_set %}<div class="warn">API kaliti o‘rnatilmagan. Ishlab chiqarishda <code>SENTINEL_API_KEY</code> muhit o‘zgaruvchisini bering va so‘rovlarga <code>X-API-Key</code> sarlavhasini qo‘shing.</div>{% endif %}
+<div class="card"><table><thead><tr><th>Usul</th><th>Manzil</th><th>Vazifasi</th></tr></thead><tbody>
+  <tr><td><code>GET</code></td><td><code>/api/v1/health</code></td><td>Holat, faol chegara va model</td></tr>
+  <tr><td><code>POST</code></td><td><code>/api/v1/flows</code></td><td>Oqimlarni qayta ishlash (to‘liq quvur: insidentlar, Telegram, SIEM). JSON ro‘yxat, <code>{"flows": [...]}</code>, JSON-lines yoki CSV. <code>?telegram=0</code> — Telegram’siz.</td></tr>
+  <tr><td><code>POST</code></td><td><code>/api/v1/score</code></td><td>Faqat baholash (saqlamasdan): p, tur, autoenkoder, prioritet</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/incidents?level=P1&amp;status=open</code></td><td>Insidentlar</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/incidents/&lt;id&gt;</code></td><td>Insident: sabablar, Telegram matni, SIEM yozuvi</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/stats</code></td><td>Statistika</td></tr>
+</tbody></table></div>
+<div class="grid grid-2 mt">
+  <div class="card"><h2>Misol: baholash</h2>
+<pre>curl -X POST http://127.0.0.1:5000/api/v1/score \
+  -H "Content-Type: application/json" \
+  -d '[{"dur": 0.000009, "proto": "udp", "service": "dns",
+        "state": "INT", "spkts": 2, "dpkts": 0, "sbytes": 114,
+        "dbytes": 0, "rate": 111111.1, "sttl": 254, "dttl": 0,
+        "sload": 50666664, "smean": 57, "ct_srv_src": 19,
+        "ct_state_ttl": 2, "ct_dst_src_ltm": 19, "ct_srv_dst": 19}]'</pre>
+  </div>
+  <div class="card"><h2>Python</h2>
+<pre>import pandas as pd, requests
+df = pd.read_csv("samples/stream_20000.csv").head(500)
+r = requests.post("http://127.0.0.1:5000/api/v1/flows?telegram=0",
+                  data=df.to_csv(index=False),
+                  headers={"Content-Type": "text/csv"})
+print(r.json())</pre>
+    <p class="small">Yo‘q ustunlar 0 (sonli) yoki «-» (kategoriyali) bilan to‘ldiriladi. Kirish oqimlari UNSW-NB15 belgilari formatida bo‘lishi kerak (Argus + Zeek, 2.2-jadval).</p>
+  </div>
+</div>
+{% endblock %}
